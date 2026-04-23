@@ -7,8 +7,42 @@ datasource db {
   provider = "postgresql"
 }
 
-model Todo {
-  id        Int      @id @default(autoincrement())
-  title     String
-  createdAt DateTime @default(now())
+model Product {
+  id          Int            @id @default(autoincrement())
+  sku         String         @unique
+  slug        String
+  name        String
+  description String
+  brand       String
+  price       Decimal        @db.Decimal(10, 2)
+  currency    String         @default("BRL")
+  category    String
+  categories  String[]
+  images      ProductImage[]
+  sizes       ProductSize[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([category, slug])
+  @@index([category])
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  path      String
+  position  Int
+
+  @@index([productId])
+}
+
+model ProductSize {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String
+  available Boolean @default(true)
+
+  @@index([productId])
 }
