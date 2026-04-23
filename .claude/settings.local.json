@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "mcp__shadcn__get_project_registries"
+      "mcp__shadcn__get_project_registries",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git add *)"
     ]
   }
 }
