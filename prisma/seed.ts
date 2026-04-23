@@ -1,9 +1,9 @@
-import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaLibSql } from '@prisma/adapter-libsql'
 import { PrismaClient } from '../src/generated/prisma/client.js'
 import { products } from './seed-data.js'
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
+const adapter = new PrismaLibSql({
+  url: process.env.DATABASE_URL!,
 })
 
 const prisma = new PrismaClient({ adapter })
@@ -13,6 +13,7 @@ async function main() {
 
   await prisma.productImage.deleteMany()
   await prisma.productSize.deleteMany()
+  await prisma.productCategory.deleteMany()
   await prisma.product.deleteMany()
 
   for (const product of products) {
@@ -26,7 +27,12 @@ async function main() {
         price: product.price,
         currency: product.currency,
         category: product.category,
-        categories: product.categories,
+        categories: {
+          create: product.categories.map((name, position) => ({
+            name,
+            position,
+          })),
+        },
         images: {
           create: product.images.map((path, position) => ({ path, position })),
         },

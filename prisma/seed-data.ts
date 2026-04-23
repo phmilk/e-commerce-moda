@@ -462,7 +462,7 @@ export const products: SeedProduct[] = [
 	},
 	{
 		category: "moda-masculina",
-		slug: "jaqueta-bomber-em-suede-marrom",
+		slug: "jaqueta-bomber-em-suede-marrom-norte-sul",
 		sku: "6438091",
 		name: "jaqueta bomber em suede marrom",
 		description: "Renove seu estilo com esta jaqueta bomber masculina, uma peça que combina sofisticação e um toque urbano. Confeccionada em suede, ela oferece um toque macio e um caimento confortável, ideal para compor looks de meia-estação. Este casaco masculino é a escolha certa para quem busca versatilidade sem abrir mão da elegância no dia a dia.\n\nEsta jaqueta bomber masculina foi pensada para unir estilo e funcionalidade. Seus detalhes incluem:\n• Modelagem bomber, um clássico atemporal do guarda-roupa masculino.\n• Gola alta que oferece proteção e um visual moderno.\n• Confeccionada em suede com elastano, proporcionando um toque macio e confortável.\n• Fechamento frontal por zíper e bolsos laterais funcionais.\n• Acabamento canelado nos punhos e na barra para um ajuste ideal ao corpo.\n\nSugestões de Uso e Combinações\nPara um visual casual e despojado, combine esta jaqueta bomber com uma camiseta básica, calça jeans e tênis. Se a ocasião pedir um look mais arrumado, experimente usá-la sobre uma camisa de malha ou tricô fino com uma calça de sarja. É um casaco versátil que transita facilmente entre o dia e a noite, adaptando-se a diferentes estilos.\n\nA gente se encontra na Norte Sul! ❤\n\nNorte Sul & EDITORAS DE MODA\nUma curadoria de looks feita pelas editoras de moda das revistas mais importantes do país, trazendo as maiores tendências da estação por quem sabe tudo do assunto!\n\nComposição: 96% poliéster e 4% elastano.\nModelo veste: M\nAltura 1,70m, busto 79cm, cintura 76cm, quadril 105cm.",

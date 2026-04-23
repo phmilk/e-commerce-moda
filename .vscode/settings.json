@@ -31,5 +31,8 @@
 	},
 	"editor.codeActionsOnSave": {
 		"source.organizeImports.biome": "explicit"
+	},
+	"[prisma]": {
+		"editor.formatOnSave": true
 	}
 }

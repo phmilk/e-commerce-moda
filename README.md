@@ -35,7 +35,7 @@ Cada escolha foi feita tendo em vista os critérios do desafio: **qualidade de U
 | Bundler | **Vite 8** | Dev-server instantâneo (ESM nativo + HMR), build otimizado com Rollup. |
 | Lint / Format | **Biome** | Substitui ESLint + Prettier com um único binário em Rust — 10x mais rápido e com zero configuração duplicada. |
 | Testes | **Vitest + Testing Library** | Usa a mesma config do Vite (sem duplicação). Testing Library incentiva testes orientados ao usuário, não à implementação. |
-| ORM (opcional) | **Prisma 7 + PostgreSQL** | Já configurado como *placeholder* para evolução do desafio (ver [proposta de arquitetura](#proposta-de-arquitetura-backend--api)). Schema *type-safe* derivado automaticamente. |
+| ORM (opcional) | **Prisma 7 + SQLite** (via `@prisma/adapter-libsql`) | Banco em arquivo local (`dev.db`), zero dependência de runtime externo. Schema *type-safe* derivado automaticamente. Evoluir para Postgres é só trocar o `provider` e o `DATABASE_URL` (ver [proposta de arquitetura](#proposta-de-arquitetura-backend--api)). |
 | Auth (opcional) | **Better Auth** | *Self-hosted*, type-safe, sem vendor lock-in. Reserva o alicerce para funcionalidades de cliente (lista de desejos, histórico) no futuro. |
 | Gerenciador | **pnpm** | `node_modules` em *content-addressable store*: instala rápido e economiza disco. Mais rigoroso que npm/yarn sobre dependências fantasmas. |
 
@@ -49,84 +49,25 @@ Cada escolha foi feita tendo em vista os critérios do desafio: **qualidade de U
 
 ## Como executar
 
-### Opção A — Docker Compose (recomendado)
-
-Sobe Postgres 17 + aplicação em dev mode, com hot reload e dados seedados.
-
-```bash
-# 1. Subir banco e app (build na primeira vez)
-docker compose up -d --build
-
-# 2. Criar as tabelas a partir do schema
-docker compose exec app pnpm exec prisma db push
-
-# 3. Popular o banco com os 96 produtos hardcoded em prisma/seed-data.ts
-docker compose exec app pnpm exec prisma db seed
-```
-
-A aplicação fica em `http://localhost:3000`. O Postgres fica exposto em `localhost:5432` (user/pass/db = `ecommerce`).
-
-**Comandos úteis:**
-
-```bash
-docker compose logs -f app                                  # logs da app
-docker compose exec app sh                                  # shell no container
-docker compose exec db psql -U ecommerce -d ecommerce       # psql no banco
-docker compose down                                         # parar (preserva dados)
-docker compose down -v                                      # parar e apagar volume do Postgres
-```
-
-### Opção B — Híbrido (Postgres no Docker + app local)
-
-Banco isolado em container, app rodando nativa com hot reload do Vite e debugger do Node disponível.
-
-Pré-requisitos: **Node.js ≥ 20** e **pnpm ≥ 9**.
-
-```bash
-# 1. Subir apenas o Postgres
-docker compose up -d db
-
-# 2. Instalar deps e gerar o Prisma Client
-pnpm install
-pnpm db:generate
-
-# 3. Criar tabelas e popular os 96 produtos
-pnpm db:push
-pnpm db:seed
-
-# 4. Rodar a aplicação local
-pnpm dev                  # http://localhost:3000
-```
-
-O `.env.local` já aponta pra `localhost:5432`, então os scripts conectam direto no container sem configuração extra.
-
-### Opção C — Sem Docker (100% nativo)
-
-Pré-requisitos: **Node.js ≥ 20**, **pnpm ≥ 9** e um **Postgres** local já disponível (ajuste `DATABASE_URL` no `.env.local` conforme suas credenciais).
+Pré-requisitos: **Node.js ≥ 20** e **pnpm ≥ 9**. Nada mais — o SQLite vive em um arquivo local (`dev.db`).
 
 ```bash
 pnpm install
-pnpm db:generate
-pnpm db:push
-pnpm db:seed
-pnpm dev                  # http://localhost:3000
+cp .env.example .env.local        # cria o arquivo de variáveis locais
+pnpm db:push                      # cria dev.db e aplica o schema
+pnpm db:seed                      # popula 96 produtos, 396 categorias, 412 imagens
+pnpm dev                          # http://localhost:3000
 ```
 
 ### Variáveis de ambiente
 
-O template versionado é [`.env.example`](.env.example). Nenhum `.env*` com valores reais é comitado.
+O template versionado é [`.env.example`](.env.example). O `.env.local` é gitignored.
 
-| Arquivo | Consumido por | Quando criar |
-| --- | --- | --- |
-| `.env.local` | `pnpm db:*`, `pnpm dev` (via dotenv-cli) | Opções B e C (app rodando localmente) |
-| `.env` | Docker Compose (substituição `${VAR}`) | Opcional — só para sobrescrever defaults (`POSTGRES_PASSWORD`, `APP_PORT`, etc.) |
-
-```bash
-cp .env.example .env.local       # local
-cp .env.example .env             # (opcional) overrides do compose
-```
-
-O [`docker-compose.yml`](docker-compose.yml) não carrega valores hardcoded: lê as vars do ambiente (shell ou `.env`) com fallback para defaults (`ecommerce:ecommerce@db:5432/ecommerce`, `APP_PORT=3000`). A `DATABASE_URL` dentro do container é derivada de `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` com hostname `db`.
+| Variável | Para quê |
+| --- | --- |
+| `DATABASE_URL` | Caminho do SQLite. Default: `file:./dev.db` (arquivo criado na raiz). |
+| `BETTER_AUTH_URL` | URL pública da app, usada pelo Better Auth (`http://localhost:3000` em dev). |
+| `BETTER_AUTH_SECRET` | Segredo do Better Auth. Gere com `pnpm dlx @better-auth/cli secret`. |
 
 > As imagens dos 96 produtos já estão versionadas em [`public/upload/{sku}/`](public/upload/) e o seed referencia esses caminhos diretamente — não há download nem cópia externa no seed.
 
@@ -155,10 +96,9 @@ O [`docker-compose.yml`](docker-compose.yml) não carrega valores hardcoded: lê
 
 ```
 .
-├── docker-compose.yml       # Postgres 17 + app em dev
-├── Dockerfile               # imagem de dev (Node 22 + pnpm)
+├── dev.db                   # SQLite local (gitignored, criado pelo pnpm db:push)
 ├── prisma/
-│   ├── schema.prisma        # Product, ProductImage, ProductSize
+│   ├── schema.prisma        # Product, ProductCategory, ProductImage, ProductSize
 │   ├── seed-data.ts         # 96 produtos hardcoded (typed)
 │   └── seed.ts              # insere seed-data via Prisma
 ├── public/
@@ -217,8 +157,8 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 
 ### Estrutura de dados
 - [x] Identificação: nome, marca (6 marcas fictícias distribuídas por categoria)
-- [ ] Comercial: preço ✓ em `Decimal(10,2)` — condição (novo/usado/excelente) ainda não modelada
-- [x] Especificações: tamanho (relação `ProductSize`) e categoria (`category` + breadcrumb em `categories`)
+- [ ] Comercial: preço ✓ em `Decimal` — condição (novo/usado/excelente) ainda não modelada
+- [x] Especificações: tamanho (relação `ProductSize`) e categoria (`category` + breadcrumb ordenado em `ProductCategory`)
 - [x] Visual: imagens (relação `ProductImage` com `path` e `position`, servidas de `public/upload/<sku>/`)
 
 > Campos `[x]` já estão implementados; `[ ]` estão planejados. Esta seção é mantida **viva**: veja a skill [`update-readme`](.claude/skills/update-readme/SKILL.md).
@@ -229,9 +169,8 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 
 Itens entregues **além** do escopo mínimo:
 
-- **Docker Compose completo**: Postgres 17 + app em dev com hot reload, healthcheck e volumes nomeados — `docker compose up -d --build` liga tudo.
 - **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`) cobrindo 4 categorias e 6 marcas fictícias, com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`.
-- **Schema de dados modelado**: `Product` + `ProductImage` + `ProductSize` em [`prisma/schema.prisma`](prisma/schema.prisma), com índices em `category` e unicidade por `(category, slug)`.
+- **Schema de dados modelado**: `Product` + `ProductCategory` + `ProductImage` + `ProductSize` em [`prisma/schema.prisma`](prisma/schema.prisma), com índices em `category` e unicidade por `(category, slug)`.
 - **SSR com hidratação**: o HTML inicial é renderizado no servidor (TanStack Start + Nitro), melhorando LCP e SEO — crítico para e-commerce.
 - **Type-safety ponta-a-ponta**: rotas, search params, loaders e dados seguem tipados do servidor ao componente.
 - **Acessibilidade de base**: `aria-label` em botões de ícone, `role="searchbox"` no campo de busca, estados `focus-visible` consistentes vindos dos tokens do shadcn/ui.
@@ -267,34 +206,37 @@ Definido em [`prisma/schema.prisma`](prisma/schema.prisma):
 
 ```prisma
 model Product {
-  id          Int            @id @default(autoincrement())
-  sku         String         @unique
+  id          Int               @id @default(autoincrement())
+  sku         String            @unique
   slug        String
   name        String
   description String
   brand       String
-  price       Decimal        @db.Decimal(10, 2)
-  currency    String         @default("BRL")
+  price       Decimal
+  currency    String            @default("BRL")
   category    String
-  categories  String[]       // breadcrumb completo vindo do catálogo de origem
+  categories  ProductCategory[] // breadcrumb ordenado vindo do catálogo de origem
   images      ProductImage[]
   sizes       ProductSize[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
   @@unique([category, slug])
   @@index([category])
 }
 
-model ProductImage { productId, path, position }
-model ProductSize  { productId, size, available }
+model ProductCategory { productId, name, position }
+model ProductImage    { productId, path, position }
+model ProductSize     { productId, size, available }
 ```
 
 ### Decisões de arquitetura
 
 - **Slug em vez de id na URL**: `/produto/<slug>` é amigável para SEO e usuário — unicidade garantida por `(category, slug)`.
+- **`ProductCategory` separado**: o breadcrumb completo vira uma relação ordenada (`name` + `position`) em vez de um array — compatível com SQLite e trivialmente consumível com `include: { categories: { orderBy: { position: 'asc' } } }`.
 - **`ProductSize` separado**: tamanho é dimensão do produto e carrega disponibilidade — permite marcar G indisponível sem remover o SKU.
 - **`ProductImage` ordenada**: `position` garante a ordem determinística da galeria; `path` aponta para `/upload/<sku>/image-NN.jpg` servido estaticamente.
 - **Índice em `category`**: filtro mais usado da PLP.
+- **SQLite agora, Postgres depois**: o adapter `@prisma/adapter-libsql` desacopla o Prisma do engine. Trocar para Postgres em produção exige apenas ajustar `provider` no schema e o `DATABASE_URL`.
 - **Cache em camadas (evolução)**: CDN (imagens) → Redis (listas, filtros) → Postgres (fonte de verdade). TanStack Query fecha o loop no cliente.
 - **Edge-ready (evolução)**: TanStack Start roda em Cloudflare Workers / Vercel Edge — `loader` da PLP pode rodar próximo ao usuário com cache compartilhado.
 
