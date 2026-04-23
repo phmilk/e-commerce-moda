@@ -4,7 +4,8 @@
       "mcp__shadcn__get_project_registries",
       "Bash(git checkout *)",
       "Bash(git pull *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(gh pr *)"
     ]
   }
 }
