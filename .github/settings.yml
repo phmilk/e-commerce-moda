@@ -1,0 +1,56 @@
+# Configuração do repositório consumida pelo Probot Settings App
+# (https://github.com/apps/settings). Instale o app no repo para que este
+# arquivo passe a ser a fonte de verdade. Sem o app, use os comandos `gh`
+# documentados no README (seção "Branch protection via gh CLI").
+
+repository:
+  name: e-commerce-moda
+  description: "Desafio técnico — jornada de compra (PLP/PDP) em TanStack Start + React 19"
+  default_branch: main
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false
+  delete_branch_on_merge: true
+
+labels:
+  - name: enhancement
+    color: "a2eeef"
+    description: "Nova feature ou melhoria (feat/*)"
+  - name: bug
+    color: "d73a4a"
+    description: "Correção de bug (fix/*)"
+  - name: chore
+    color: "ededed"
+    description: "Manutenção sem impacto funcional (chore/*)"
+  - name: hotfix
+    color: "b60205"
+    description: "Correção urgente em produção (hotfix/*)"
+  - name: release
+    color: "0e8a16"
+    description: "PR de release automatizada (release/*)"
+  - name: autorelease
+    color: "0e8a16"
+    description: "Aplicada automaticamente pelo release-please"
+
+branches:
+  - name: main
+    protection:
+      required_pull_request_reviews:
+        required_approving_review_count: 1
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: false
+      required_status_checks:
+        strict: true
+        contexts:
+          - Lint
+          - Test
+          - Build
+      enforce_admins: false
+      required_linear_history: true
+      allow_force_pushes: false
+      allow_deletions: false
+      required_conversation_resolution: true
+      restrictions: null
