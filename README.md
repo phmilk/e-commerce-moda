@@ -49,29 +49,86 @@ Cada escolha foi feita tendo em vista os critérios do desafio: **qualidade de U
 
 ## Como executar
 
-### Pré-requisitos
-- **Node.js** ≥ 20
-- **pnpm** ≥ 9 (`npm i -g pnpm`)
+### Opção A — Docker Compose (recomendado)
 
-### Passos
+Sobe Postgres 17 + aplicação em dev mode, com hot reload e dados seedados.
+
+```bash
+# 1. Subir banco e app (build na primeira vez)
+docker compose up -d --build
+
+# 2. Criar as tabelas a partir do schema
+docker compose exec app pnpm exec prisma db push
+
+# 3. Popular o banco com os 96 produtos hardcoded em prisma/seed-data.ts
+docker compose exec app pnpm exec prisma db seed
+```
+
+A aplicação fica em `http://localhost:3000`. O Postgres fica exposto em `localhost:5432` (user/pass/db = `ecommerce`).
+
+**Comandos úteis:**
+
+```bash
+docker compose logs -f app                                  # logs da app
+docker compose exec app sh                                  # shell no container
+docker compose exec db psql -U ecommerce -d ecommerce       # psql no banco
+docker compose down                                         # parar (preserva dados)
+docker compose down -v                                      # parar e apagar volume do Postgres
+```
+
+### Opção B — Híbrido (Postgres no Docker + app local)
+
+Banco isolado em container, app rodando nativa com hot reload do Vite e debugger do Node disponível.
+
+Pré-requisitos: **Node.js ≥ 20** e **pnpm ≥ 9**.
+
+```bash
+# 1. Subir apenas o Postgres
+docker compose up -d db
+
+# 2. Instalar deps e gerar o Prisma Client
+pnpm install
+pnpm db:generate
+
+# 3. Criar tabelas e popular os 96 produtos
+pnpm db:push
+pnpm db:seed
+
+# 4. Rodar a aplicação local
+pnpm dev                  # http://localhost:3000
+```
+
+O `.env.local` já aponta pra `localhost:5432`, então os scripts conectam direto no container sem configuração extra.
+
+### Opção C — Sem Docker (100% nativo)
+
+Pré-requisitos: **Node.js ≥ 20**, **pnpm ≥ 9** e um **Postgres** local já disponível (ajuste `DATABASE_URL` no `.env.local` conforme suas credenciais).
 
 ```bash
 pnpm install
-pnpm dev
+pnpm db:generate
+pnpm db:push
+pnpm db:seed
+pnpm dev                  # http://localhost:3000
 ```
 
-A aplicação fica disponível em `http://localhost:3000`.
+### Variáveis de ambiente
 
-### Variáveis de ambiente (opcional, apenas se for usar DB/Auth)
+O template versionado é [`.env.example`](.env.example). Nenhum `.env*` com valores reais é comitado.
 
-Crie um `.env.local` na raiz:
+| Arquivo | Consumido por | Quando criar |
+| --- | --- | --- |
+| `.env.local` | `pnpm db:*`, `pnpm dev` (via dotenv-cli) | Opções B e C (app rodando localmente) |
+| `.env` | Docker Compose (substituição `${VAR}`) | Opcional — só para sobrescrever defaults (`POSTGRES_PASSWORD`, `APP_PORT`, etc.) |
 
-```env
-DATABASE_URL="postgresql://user:password@localhost:5432/ecommerce_moda"
-BETTER_AUTH_SECRET="<gerado via: pnpm dlx @better-auth/cli secret>"
+```bash
+cp .env.example .env.local       # local
+cp .env.example .env             # (opcional) overrides do compose
 ```
 
-> Os dados de produto atualmente são **mockados** (conforme permitido pela nota técnica do desafio). Banco e auth estão pré-configurados para evolução futura.
+O [`docker-compose.yml`](docker-compose.yml) não carrega valores hardcoded: lê as vars do ambiente (shell ou `.env`) com fallback para defaults (`ecommerce:ecommerce@db:5432/ecommerce`, `APP_PORT=3000`). A `DATABASE_URL` dentro do container é derivada de `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` com hostname `db`.
+
+> As imagens dos 96 produtos já estão versionadas em [`public/upload/{sku}/`](public/upload/) e o seed referencia esses caminhos diretamente — não há download nem cópia externa no seed.
 
 ---
 
@@ -86,32 +143,43 @@ BETTER_AUTH_SECRET="<gerado via: pnpm dlx @better-auth/cli secret>"
 | `pnpm lint` | Lint com Biome |
 | `pnpm format` | Format com Biome |
 | `pnpm check` | Lint + format em um passo |
+| `pnpm db:generate` | Gera o Prisma Client em `src/generated/prisma` |
 | `pnpm db:push` | Sincroniza o schema Prisma com o banco |
 | `pnpm db:migrate` | Cria/aplica migrations |
 | `pnpm db:studio` | Abre o Prisma Studio |
-| `pnpm db:seed` | Popula dados iniciais |
+| `pnpm db:seed` | Popula o banco com os 96 produtos de `prisma/seed-data.ts` |
 
 ---
 
 ## Estrutura do projeto
 
 ```
-src/
-├── components/
-│   ├── Layout/              # Header, Footer e wrappers de página
-│   │   └── Header/          # Logo, SearchBar, FilterButton, CartButton, LoginButton
-│   └── ui/                  # shadcn/ui (button, input, badge, sheet, separator...)
-├── integrations/
-│   ├── better-auth/         # Provider e helpers de autenticação
-│   └── tanstack-query/      # Root provider + devtools do Query
-├── lib/                     # utilitários compartilhados (cn, auth client...)
-├── routes/
-│   ├── __root.tsx           # shell HTML, metadados, devtools
-│   ├── _layout/             # layout com Header (grupo de rotas)
-│   └── api/                 # route handlers (ex.: /api/auth/$)
-├── router.tsx               # configuração do TanStack Router + SSR Query
-├── db.ts                    # instância singleton do Prisma
-└── styles.css               # Tailwind + tokens do design system
+.
+├── docker-compose.yml       # Postgres 17 + app em dev
+├── Dockerfile               # imagem de dev (Node 22 + pnpm)
+├── prisma/
+│   ├── schema.prisma        # Product, ProductImage, ProductSize
+│   ├── seed-data.ts         # 96 produtos hardcoded (typed)
+│   └── seed.ts              # insere seed-data via Prisma
+├── public/
+│   └── upload/<sku>/        # imagens de produto (96 pastas, 412 arquivos)
+└── src/
+    ├── components/
+    │   ├── Layout/          # Header, Footer e wrappers de página
+    │   │   └── Header/      # Logo, SearchBar, FilterButton, CartButton, LoginButton
+    │   └── ui/              # shadcn/ui (button, input, badge, sheet, separator...)
+    ├── integrations/
+    │   ├── better-auth/     # Provider e helpers de autenticação
+    │   └── tanstack-query/  # Root provider + devtools do Query
+    ├── lib/                 # utilitários compartilhados (cn, auth client...)
+    ├── routes/
+    │   ├── __root.tsx       # shell HTML, metadados, devtools
+    │   ├── _layout/         # layout com Header (grupo de rotas)
+    │   └── api/             # route handlers (ex.: /api/auth/$)
+    ├── generated/prisma/    # Prisma Client (gerado, não comitado)
+    ├── router.tsx           # configuração do TanStack Router + SSR Query
+    ├── db.ts                # instância singleton do Prisma
+    └── styles.css           # Tailwind + tokens do design system
 ```
 
 ### Convenções
@@ -147,11 +215,11 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 - [ ] Feedback visual em interações (hover, active, focus)
 - [ ] Estados de erro e vazio
 
-### Estrutura de dados (mockável)
-- [ ] Identificação: nome, marca
-- [ ] Comercial: preço (number), condição (novo/usado/excelente)
-- [ ] Especificações: tamanho, categoria
-- [ ] Visual: imagem
+### Estrutura de dados
+- [x] Identificação: nome, marca (6 marcas fictícias distribuídas por categoria)
+- [ ] Comercial: preço ✓ em `Decimal(10,2)` — condição (novo/usado/excelente) ainda não modelada
+- [x] Especificações: tamanho (relação `ProductSize`) e categoria (`category` + breadcrumb em `categories`)
+- [x] Visual: imagens (relação `ProductImage` com `path` e `position`, servidas de `public/upload/<sku>/`)
 
 > Campos `[x]` já estão implementados; `[ ]` estão planejados. Esta seção é mantida **viva**: veja a skill [`update-readme`](.claude/skills/update-readme/SKILL.md).
 
@@ -161,6 +229,9 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 
 Itens entregues **além** do escopo mínimo:
 
+- **Docker Compose completo**: Postgres 17 + app em dev com hot reload, healthcheck e volumes nomeados — `docker compose up -d --build` liga tudo.
+- **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`) cobrindo 4 categorias e 6 marcas fictícias, com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`.
+- **Schema de dados modelado**: `Product` + `ProductImage` + `ProductSize` em [`prisma/schema.prisma`](prisma/schema.prisma), com índices em `category` e unicidade por `(category, slug)`.
 - **SSR com hidratação**: o HTML inicial é renderizado no servidor (TanStack Start + Nitro), melhorando LCP e SEO — crítico para e-commerce.
 - **Type-safety ponta-a-ponta**: rotas, search params, loaders e dados seguem tipados do servidor ao componente.
 - **Acessibilidade de base**: `aria-label` em botões de ícone, `role="searchbox"` no campo de busca, estados `focus-visible` consistentes vindos dos tokens do shadcn/ui.
@@ -190,41 +261,49 @@ GET  /api/cart
 **Exemplo de query params da PLP:**
 `/api/products?categoria=feminino&marca=marca-x&tamanho=M&ordem=preco-asc&pagina=1`
 
-### Modelo de dados (Prisma)
+### Modelo de dados (Prisma) — implementado
+
+Definido em [`prisma/schema.prisma`](prisma/schema.prisma):
 
 ```prisma
 model Product {
-  id           String   @id @default(cuid())
-  slug         String   @unique
-  name         String
-  brand        String
-  description  String
-  priceCents   Int                  // dinheiro em centavos (evita float)
-  condition    Condition            // NEW | USED | EXCELLENT
-  category     Category             // MASCULINO | FEMININO | ACESSORIOS
-  images       String[]             // URLs ordenadas
-  variants     Variant[]            // tamanho + estoque
-  createdAt    DateTime @default(now())
-  @@index([category, brand])        // filtros mais usados
+  id          Int            @id @default(autoincrement())
+  sku         String         @unique
+  slug        String
+  name        String
+  description String
+  brand       String
+  price       Decimal        @db.Decimal(10, 2)
+  currency    String         @default("BRL")
+  category    String
+  categories  String[]       // breadcrumb completo vindo do catálogo de origem
+  images      ProductImage[]
+  sizes       ProductSize[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  @@unique([category, slug])
+  @@index([category])
 }
 
-model Variant {
-  id        String  @id @default(cuid())
-  size      String              // P, M, G, 42...
-  stock     Int
-  product   Product @relation(fields: [productId], references: [id])
-  productId String
-}
+model ProductImage { productId, path, position }
+model ProductSize  { productId, size, available }
 ```
 
 ### Decisões de arquitetura
 
-- **Preços em centavos** (`Int`): evita erros de ponto flutuante — padrão em qualquer sistema financeiro sério.
-- **Slug em vez de id na URL**: `/produto/camiseta-algodao-marca-x` é amigável para SEO e usuário.
-- **Variants separadas**: tamanho é dimensão de estoque, não do produto — permite vender M sem G no mesmo SKU.
-- **Indexes compostos** em `(category, brand)`: filtros combinados são a query quente da PLP.
-- **Cache em camadas**: CDN (imagens) → Redis (listas, filtros) → Postgres (fonte de verdade). TanStack Query fecha o loop no cliente.
-- **Edge-ready**: TanStack Start roda em Cloudflare Workers / Vercel Edge — `loader` da PLP pode rodar próximo ao usuário com cache compartilhado.
+- **Slug em vez de id na URL**: `/produto/<slug>` é amigável para SEO e usuário — unicidade garantida por `(category, slug)`.
+- **`ProductSize` separado**: tamanho é dimensão do produto e carrega disponibilidade — permite marcar G indisponível sem remover o SKU.
+- **`ProductImage` ordenada**: `position` garante a ordem determinística da galeria; `path` aponta para `/upload/<sku>/image-NN.jpg` servido estaticamente.
+- **Índice em `category`**: filtro mais usado da PLP.
+- **Cache em camadas (evolução)**: CDN (imagens) → Redis (listas, filtros) → Postgres (fonte de verdade). TanStack Query fecha o loop no cliente.
+- **Edge-ready (evolução)**: TanStack Start roda em Cloudflare Workers / Vercel Edge — `loader` da PLP pode rodar próximo ao usuário com cache compartilhado.
+
+### Evoluções planejadas do modelo
+
+- **`priceCents` em `Int`** no lugar de `Decimal` — reduz risco de arredondamento em operações (frete, desconto, parcelas).
+- **Enum `Condition`** (`NEW` | `USED` | `EXCELLENT`) para atender ao requisito de condição do desafio.
+- **Estoque real** em `ProductSize.stock: Int` em vez do booleano `available`.
+- **Enum `Category`** (`MASCULINO` | `FEMININO` | `ACESSORIOS`) no lugar da string atual.
 
 ### Observabilidade (caminho natural de evolução)
 
