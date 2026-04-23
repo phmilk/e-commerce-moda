@@ -16,6 +16,7 @@ concurrency:
 env:
   NODE_VERSION: "22"
   PNPM_VERSION: "9"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   quality:
@@ -51,18 +52,5 @@ jobs:
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: node
-          package-name: e-commerce-moda
-          changelog-types: |
-            [
-              {"type":"feat","section":"Features","hidden":false},
-              {"type":"fix","section":"Bug Fixes","hidden":false},
-              {"type":"perf","section":"Performance","hidden":false},
-              {"type":"refactor","section":"Refactors","hidden":false},
-              {"type":"docs","section":"Documentation","hidden":false},
-              {"type":"build","section":"Build","hidden":true},
-              {"type":"ci","section":"CI","hidden":true},
-              {"type":"chore","section":"Chores","hidden":true},
-              {"type":"test","section":"Tests","hidden":true},
-              {"type":"style","section":"Styles","hidden":true}
-            ]
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
