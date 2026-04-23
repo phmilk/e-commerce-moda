@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.0.0...e-commerce-moda-v1.1.0) (2026-04-23)
+
+
+### Features
+
+* catalogo de produtos + docker compose ([#5](https://github.com/phmilk/e-commerce-moda/issues/5)) ([42ab12f](https://github.com/phmilk/e-commerce-moda/commit/42ab12fff3119332eafb099108760d980fc22907))
+
 ## 1.0.0 (2026-04-23)
 
 
