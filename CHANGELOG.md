@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.1.0...e-commerce-moda-v1.2.0) (2026-04-24)
+
+
+### Features
+
+* normaliza schema do catalogo com lookups, slugs e preco em centavos ([#8](https://github.com/phmilk/e-commerce-moda/issues/8)) ([5b97eea](https://github.com/phmilk/e-commerce-moda/commit/5b97eea142fc6203d174005844f7ec6825d0cf47))
+
 ## [1.1.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.0.0...e-commerce-moda-v1.1.0) (2026-04-23)
 
 
