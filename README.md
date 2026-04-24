@@ -55,7 +55,7 @@ Pré-requisitos: **Node.js ≥ 20** e **pnpm ≥ 9**. Nada mais — o SQLite viv
 pnpm install
 cp .env.example .env.local        # cria o arquivo de variáveis locais
 pnpm db:push                      # cria dev.db e aplica o schema
-pnpm db:seed                      # popula 96 produtos, 396 categorias, 412 imagens
+pnpm db:seed                      # popula 96 produtos, 300 itens de breadcrumb, 412 imagens
 pnpm dev                          # http://localhost:3000
 ```
 
@@ -98,7 +98,7 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
 .
 ├── dev.db                   # SQLite local (gitignored, criado pelo pnpm db:push)
 ├── prisma/
-│   ├── schema.prisma        # Product, ProductCategory, ProductImage, ProductSize
+│   ├── schema.prisma        # Product + lookups (Brand, Category, Condition, Size) + junções (ProductCategory/ProductSize) + ProductImage
 │   ├── seed-data.ts         # 96 produtos hardcoded (typed)
 │   └── seed.ts              # insere seed-data via Prisma
 ├── public/
@@ -156,9 +156,9 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 - [ ] Estados de erro e vazio
 
 ### Estrutura de dados
-- [x] Identificação: nome, marca (6 marcas fictícias distribuídas por categoria)
-- [ ] Comercial: preço ✓ em `Decimal` — condição (novo/usado/excelente) ainda não modelada
-- [x] Especificações: tamanho (relação `ProductSize`) e categoria (`category` + breadcrumb ordenado em `ProductCategory`)
+- [x] Identificação: nome + `Brand` (lookup compartilhado — 6 marcas fictícias referenciadas por `brandId`)
+- [x] Comercial: preço em `Int` (centavos BRL, evita arredondamento de float) + `Condition` (lookup com `Novo` / `Usado` / `Excelente estado`)
+- [x] Especificações: `Size` (lookup — 24 tamanhos distintos) via junção `ProductSize` com `available`, e `Category` (lookup — 19 categorias) via junção `ProductCategory` ordenada (breadcrumb multi-nível; um produto pode pertencer a várias categorias)
 - [x] Visual: imagens (relação `ProductImage` com `path` e `position`, servidas de `public/upload/<sku>/`)
 
 > Campos `[x]` já estão implementados; `[ ]` estão planejados. Esta seção é mantida **viva**: veja a skill [`update-readme`](.claude/skills/update-readme/SKILL.md).
@@ -169,8 +169,8 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 
 Itens entregues **além** do escopo mínimo:
 
-- **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`) cobrindo 4 categorias e 6 marcas fictícias, com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`.
-- **Schema de dados modelado**: `Product` + `ProductCategory` + `ProductImage` + `ProductSize` em [`prisma/schema.prisma`](prisma/schema.prisma), com índices em `category` e unicidade por `(category, slug)`.
+- **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`) cobrindo 4 categorias e 6 marcas fictícias, com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`. Condição de cada produto é atribuída deterministicamente por hash FNV-1a do SKU — distribuição estável entre execuções.
+- **Schema de dados modelado**: `Product` normalizado com quatro lookups (`Brand`, `Category`, `Condition`, `Size`) e duas junções (`ProductCategory` ordenada para breadcrumb multi-nível; `ProductSize` carregando `available` por tamanho) em [`prisma/schema.prisma`](prisma/schema.prisma). Índices em todas as FKs, `slug` globalmente único em `Product` e em cada lookup, preço em `Int` (centavos). Slugs URL-safe em todos os lookups preparam filtros por query-string (ex.: `?marca=kairo&condicao=novo&categoria=roupas&tamanho=m`).
 - **SSR com hidratação**: o HTML inicial é renderizado no servidor (TanStack Start + Nitro), melhorando LCP e SEO — crítico para e-commerce.
 - **Type-safety ponta-a-ponta**: rotas, search params, loaders e dados seguem tipados do servidor ao componente.
 - **Acessibilidade de base**: `aria-label` em botões de ícone, `role="searchbox"` no campo de busca, estados `focus-visible` consistentes vindos dos tokens do shadcn/ui.
@@ -208,44 +208,63 @@ Definido em [`prisma/schema.prisma`](prisma/schema.prisma):
 model Product {
   id          Int               @id @default(autoincrement())
   sku         String            @unique
-  slug        String
+  slug        String            @unique
   name        String
   description String
-  brand       String
-  price       Decimal
+  brandId     Int
+  brand       Brand             @relation(fields: [brandId], references: [id])
+  price       Int               // centavos BRL (ex.: 15999 = R$ 159,99)
   currency    String            @default("BRL")
-  category    String
-  categories  ProductCategory[] // breadcrumb ordenado vindo do catálogo de origem
+  conditionId Int
+  condition   Condition         @relation(fields: [conditionId], references: [id])
+  categories  ProductCategory[] // junção ordenada — ex. breadcrumb: Moda Masculina > Roupas > Blusas
   images      ProductImage[]
-  sizes       ProductSize[]
+  sizes       ProductSize[]     // junção com `available` por tamanho
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
-  @@unique([category, slug])
-  @@index([category])
+  @@index([brandId])
+  @@index([conditionId])
 }
 
-model ProductCategory { productId, name, position }
+model Brand           { id, name @unique, slug @unique }                              // 6 linhas: "Vértice Moda" / "vertice-moda" etc.
+model Category        { id, name @unique, slug @unique }                              // 19 linhas: "Moda Masculina" / "moda-masculina", "Roupas" / "roupas"...
+model Condition       { id, name @unique, slug @unique }                              // 3 linhas: "Novo" / "novo", "Usado" / "usado", "Excelente estado" / "excelente-estado"
+model Size            { id, name @unique, slug @unique }                              // 24 linhas: "P" / "p", "M" / "m", "37" / "37", "Unico" / "unico"...
+model ProductCategory { productId, categoryId, position, @@unique([productId, categoryId]) }  // itens ordenados do breadcrumb (N por produto)
+model ProductSize     { productId, sizeId, available,   @@unique([productId, sizeId]) }       // tamanhos disponíveis por produto
 model ProductImage    { productId, path, position }
-model ProductSize     { productId, size, available }
 ```
 
 ### Decisões de arquitetura
 
-- **Slug em vez de id na URL**: `/produto/<slug>` é amigável para SEO e usuário — unicidade garantida por `(category, slug)`.
-- **`ProductCategory` separado**: o breadcrumb completo vira uma relação ordenada (`name` + `position`) em vez de um array — compatível com SQLite e trivialmente consumível com `include: { categories: { orderBy: { position: 'asc' } } }`.
-- **`ProductSize` separado**: tamanho é dimensão do produto e carrega disponibilidade — permite marcar G indisponível sem remover o SKU.
+- **Slug globalmente único**: `/produto/<slug>` é amigável para SEO e usuário — `slug @unique` garante que cada produto tem URL determinística, sem precisar compor com categoria.
+- **Preço em `Int` centavos**: evita arredondamento de ponto-flutuante em qualquer camada (cálculo de total, frete, desconto, serialização JSON). Formatação de apresentação acontece na borda (`Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)`).
+- **Quatro lookups + duas junções** (`Brand`/`Category`/`Condition`/`Size` + `ProductCategory`/`ProductSize`): valores que se repetem entre produtos viram tabelas referenciadas por FK; tabelas de junção guardam só o que é específico da relação (`position` no breadcrumb, `available` por tamanho). Ganhos imediatos: renomear "Roupas" → "Roupa" é `UPDATE` de uma linha em vez de ~100; filtros viram JOIN numérico indexado (mais rápido que `LIKE` em string); cada lookup pode ganhar atributos (`Brand.logo`, `Category.parentId`, `Size.displayOrder`) sem tocar nas junções.
+- **Breadcrumb via `ProductCategory` ordenada** (relação N-por-produto): um produto pertence a múltiplas categorias hierárquicas (ex.: `Moda Masculina > Roupas > Blusas`) em vez de a uma única classificação primária. Filtrar "Roupas" vira `where: { categories: { some: { category: { slug: 'roupas' } } } }` — mesmo nó serve PLPs distintos (masculina/feminina). Hoje a hierarquia emerge de `position`; caso vire navegação canônica, `Category.parentId` resolve sem migração de dados.
+- **`slug` URL-safe em todo lookup**: destrava filtros por query-string estáveis, não dependentes de `name` com acentos/espaços. Exemplo prático — `/produtos?marca=kairo&condicao=novo&categoria=roupas&tamanho=m` vira:
+  ```ts
+  prisma.product.findMany({
+    where: {
+      brand:      { slug: 'kairo' },
+      condition:  { slug: 'novo' },
+      categories: { some: { category: { slug: 'roupas' } } },
+      sizes:      { some: { size: { slug: 'm' }, available: true } },
+    },
+  })
+  ```
+  Slugs de `Brand`/`Condition` são hardcoded em [seed-data.ts](prisma/seed-data.ts) (tuplas `{ name, slug }` com `as const`); slugs de `Category`/`Size` são derivados pelo helper `slugify` em seed-time (NFD + strip diacríticos + kebab-case) — evita duplicar 19 categorias × 24 tamanhos no arquivo. O slug também faz dedup: `"Unico"` e `"Único"` colapsam na mesma linha de `Size` (slug `unico`).
+- **`ProductSize` carrega `available`**: tamanho é dimensão compartilhada, mas a disponibilidade é por produto — permite marcar G indisponível em um SKU sem remover o tamanho.
 - **`ProductImage` ordenada**: `position` garante a ordem determinística da galeria; `path` aponta para `/upload/<sku>/image-NN.jpg` servido estaticamente.
-- **Índice em `category`**: filtro mais usado da PLP.
+- **Índices**: todas as FKs (`brandId`, `conditionId`, `categoryId`, `sizeId`, `productId`) + os slugs únicos dos lookups — cobre filtros da PLP sem varredura de tabela.
 - **SQLite agora, Postgres depois**: o adapter `@prisma/adapter-libsql` desacopla o Prisma do engine. Trocar para Postgres em produção exige apenas ajustar `provider` no schema e o `DATABASE_URL`.
 - **Cache em camadas (evolução)**: CDN (imagens) → Redis (listas, filtros) → Postgres (fonte de verdade). TanStack Query fecha o loop no cliente.
 - **Edge-ready (evolução)**: TanStack Start roda em Cloudflare Workers / Vercel Edge — `loader` da PLP pode rodar próximo ao usuário com cache compartilhado.
 
 ### Evoluções planejadas do modelo
 
-- **`priceCents` em `Int`** no lugar de `Decimal` — reduz risco de arredondamento em operações (frete, desconto, parcelas).
-- **Enum `Condition`** (`NEW` | `USED` | `EXCELLENT`) para atender ao requisito de condição do desafio.
 - **Estoque real** em `ProductSize.stock: Int` em vez do booleano `available`.
-- **Enum `Category`** (`MASCULINO` | `FEMININO` | `ACESSORIOS`) no lugar da string atual.
+- **Atributos por lookup**: com `Brand`/`Category`/`Condition`/`Size` já como tabelas, evoluir para `Brand.logoPath`, `Condition.badgeColor` ou `Size.displayOrder` vira adição de coluna — sem migração de dados.
+- **Hierarquia canônica de categorias**: hoje a árvore (`Moda Masculina > Roupas > Blusas`) emerge da ordenação de `ProductCategory.position`. Para páginas de categoria (`/categoria/roupas`) com filhos/pais consistentes entre produtos, adicionar `Category.parentId` (self-relation) resolve sem migração de dados dos produtos.
 
 ### Observabilidade (caminho natural de evolução)
 
