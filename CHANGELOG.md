@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.2.0...e-commerce-moda-v1.3.0) (2026-04-24)
+
+
+### Features
+
+* PLP com listagem, filtros hierarquicos, busca fuzzy, SSR e SEO ([#10](https://github.com/phmilk/e-commerce-moda/issues/10)) ([ec3a60e](https://github.com/phmilk/e-commerce-moda/commit/ec3a60e526aaed2bb7d155b44f56ff8fe1fe826b))
+
 ## [1.2.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.1.0...e-commerce-moda-v1.2.0) (2026-04-24)
 
 
