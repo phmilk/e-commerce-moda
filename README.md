@@ -109,6 +109,7 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
     │   ├── Layout/          # Header e wrappers de página
     │   │   └── Header/      # Logo, SearchBar (busca fuzzy), FilterButton (badge + store), CartButton, LoginButton
     │   ├── PLP/             # fractal: PLP.tsx + ProductGrid/ProductCard, FilterSheet/CategoryTree+FilterSection, SortSelect, PLPHeader, PLPPagination, EmptyState, ProductGridSkeleton, ProductsJsonLd, hooks/
+    │   ├── PDP/             # fractal: PDP.tsx + PDPBreadcrumb, PDPGallery, PDPInfo/PDPSizes, PDPSkeleton, ProductJsonLd, hooks/
     │   └── ui/              # shadcn/ui (button, input, badge, sheet, separator, card, select, checkbox, pagination, skeleton, breadcrumb, tooltip)
     ├── hooks/               # hooks compartilhados entre features (ex.: use-filter-sheet)
     ├── integrations/
@@ -120,12 +121,13 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
     │   ├── utils.ts         # cn (clsx + tailwind-merge)
     │   └── auth-client.ts   # client do Better Auth
     ├── server/
-    │   └── products.ts      # server functions (createServerFn): listProducts, listFilterFacets
+    │   └── products.ts      # server functions (createServerFn): listProducts, listFilterFacets, getProductBySlug
     ├── routes/
     │   ├── __root.tsx       # shell HTML, TooltipProvider, devtools
     │   ├── _layout/         # grupo com Header
     │   │   ├── route.tsx    # <Header /> + <Outlet />
-    │   │   └── index.tsx    # rota / (PLP) — validateSearch, loader, head (SEO)
+    │   │   ├── index.tsx    # rota / (PLP) — validateSearch, loader, head (SEO)
+    │   │   └── produto.$slug.tsx  # rota /produto/<slug> (PDP) — loader + head + notFound
     │   └── api/             # route handlers (ex.: /api/auth/$)
     ├── generated/prisma/    # Prisma Client (gerado, não comitado; `postinstall` cria)
     ├── router.tsx           # TanStack Router: SSR Query + parseSearch/stringifySearch (URL com chaves repetidas)
@@ -151,15 +153,15 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 - [x] Ordenação por preço e nome (`SortSelect` dentro do sheet, 5 chaves: relevância, preço asc/desc, nome A→Z / Z→A)
 
 ### Página interna — Detalhes (PDP)
-- [ ] Visualização expandida do item
-- [ ] Informações técnicas completas
-- [ ] Galeria de imagens do produto
+- [x] Visualização expandida do item (rota `/produto/$slug` com SSR loader, `<PDP>` composto por `PDPBreadcrumb` + `PDPGallery` + `PDPInfo`)
+- [x] Informações técnicas completas (marca, nome, SKU, condição, preço em destaque, descrição preservando `\n`, grid de tamanhos com indicador de disponibilidade)
+- [x] Galeria de imagens do produto (`PDPGallery` com imagem principal + thumbnails laterais no desktop / abaixo no mobile, navegação por teclado `←`/`→`, primeira imagem `eager` + `fetchPriority="high"`)
 
 ### Navegação / Fluxo do usuário
 - [x] Layout base com Header fixo e responsivo
 - [ ] Transição suave entre páginas
 - [x] Persistência de estado básica (filtros, busca, ordenação e paginação vivem 100% em search params — sobrevivem a refresh, back/forward e são compartilháveis via URL)
-- [ ] Botão de retorno e breadcrumbs (componente `breadcrumb` do shadcn instalado; aguarda PDP)
+- [x] Botão de retorno e breadcrumbs (`PDPBreadcrumb` com hierarquia canônica vinda de `Category.parentId` — primeiro item volta ao Catálogo, intermediários linkam pra PLP pré-filtrada por aquela categoria)
 
 ### Feedback / Estados de interface
 - [x] Skeleton screens na PLP (`ProductGridSkeleton` renderiza enquanto o cache do React Query está vazio; em transições de filtro usa `opacity-70`)
@@ -187,6 +189,8 @@ Itens entregues **além** do escopo mínimo:
 - **Busca fuzzy por tokens** na `SearchBar`: debounce 300ms + tokenização em AND-contains sobre `name`/`description` (tolera ordem de palavras e strings parciais).
 - **URL como fonte de verdade**: `parseSearch`/`stringifySearch` custom no TanStack Router emitem chaves repetidas (`?categoria=a&categoria=b`) em vez de JSON — URLs curtas, compartilháveis, indexáveis.
 - **SEO dinâmico por combinação de filtros**: `<title>`, `<meta name="description">`, canonical e OpenGraph derivam do search; **JSON-LD `ItemList`** (schema.org) é renderizado inline no SSR com `Product`/`Offer`/`Brand` por item.
+- **SEO da PDP**: `<title>` e `description` específicos por produto, OpenGraph `og:type=product` com primeira imagem absoluta + `og:image`/`twitter:image`, canonical estável por slug, e **JSON-LD `Product`** inline com `brand`/`image[]`/`offers`/`itemCondition` — rich-results-ready.
+- **Prefetch on intent**: `ProductCard` usa `<Link>` tipado do TanStack Router; com `defaultPreload: "intent"` já configurado, passar o mouse num card já faz prefetch do loader da PDP, eliminando waterfall no clique.
 - **SSR com hidratação**: o HTML inicial é renderizado no servidor (TanStack Start + Nitro), melhorando LCP e SEO — crítico para e-commerce.
 - **Imagens performáticas**: `loading="lazy"` em todos os cards + `fetchPriority="high"` + `loading="eager"` nos 4 primeiros (acima da dobra), `width`/`height` explícitos para CLS zero, `sizes` responsivo.
 - **Testes automatizados**: 45 testes Vitest cobrindo `validateProductSearch`, `normalizeSearchKey`, `toggleFacet`, `clearFilters`, `countActiveFilters` + helpers puros do `CategoryTree` (collectLeafSlugs, simplifyTree, expandToLeaves, compactSelection, subtreeState).
@@ -209,7 +213,7 @@ Em vez de route handlers REST, o backend usa server functions do TanStack Start 
 ```ts
 listProducts({ data: search })        // PLP — paginado + filtros + ordenação
 listFilterFacets({ data: search })    // facets com contagens contextuais
-// PDP (planejado): getProductBySlug({ data: slug })
+getProductBySlug({ data: slug })      // PDP — detalhes + breadcrumb via Category.parentId
 ```
 
 **Exemplo de URL da PLP:**
@@ -281,7 +285,6 @@ model ProductImage    { productId, path, position }
 
 - **Estoque real** em `ProductSize.stock: Int` em vez do booleano `available`.
 - **Atributos por lookup**: com `Brand`/`Category`/`Condition`/`Size` já como tabelas, evoluir para `Brand.logoPath`, `Condition.badgeColor` ou `Size.displayOrder` vira adição de coluna — sem migração de dados.
-- **PDP**: rota `/produto/$slug` consumindo server function dedicada (`getProductBySlug`), galeria de imagens com `position`, breadcrumb resolvido via árvore `Category.parentId` (já canônica).
 - **Transições entre rotas**: habilitar `viewTransition` do TanStack Router na PLP↔PDP para cross-fade do card.
 
 ### Observabilidade (caminho natural de evolução)
