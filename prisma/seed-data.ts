@@ -27,6 +27,58 @@ export const CONDITIONS = [
 
 export type ProductCondition = (typeof CONDITIONS)[number]["name"]
 
+/**
+ * Gendered category hierarchy — the canonical tree rendered in the PLP
+ * filter. Root nodes ("Moda Masculina" / "Moda Feminina") use a plain
+ * slug; their descendants use an `-m` / `-f` suffix so the same display
+ * name ("Blusas", "Acessórios") can live independently under each gender.
+ *
+ * The seeder creates every row below in two passes (roots first, then
+ * children) and uses `resolveProductCategories` to map the legacy
+ * breadcrumb strings in `SeedProduct.categories` to the correct gendered
+ * slugs at insert time.
+ */
+export const GENDERED_CATEGORY_TREE = [
+	{ name: "Moda Masculina", displayName: "Moda Masculina", slug: "moda-masculina" },
+	{ name: "Moda Feminina", displayName: "Moda Feminina", slug: "moda-feminina" },
+
+	// Masculinas
+	{ name: "Acessórios", displayName: "Acessórios Masculinos", slug: "acessorios-m", parent: "moda-masculina" },
+	{ name: "Roupas", displayName: "Roupas Masculinas", slug: "roupas-m", parent: "moda-masculina" },
+	{ name: "Calçados", displayName: "Calçados Masculinos", slug: "calcados-m", parent: "moda-masculina" },
+	{ name: "Blusas", displayName: "Blusas Masculinas", slug: "blusas-m", parent: "roupas-m" },
+	{ name: "Calças", displayName: "Calças Masculinas", slug: "calcas-m", parent: "roupas-m" },
+	{ name: "Casacos", displayName: "Casacos Masculinos", slug: "casacos-m", parent: "roupas-m" },
+	{ name: "Bermudas", displayName: "Bermudas Masculinas", slug: "bermudas-m", parent: "roupas-m" },
+	{ name: "Shorts", displayName: "Shorts Masculinos", slug: "shorts-m", parent: "roupas-m" },
+	{ name: "Bolsas", displayName: "Bolsas Masculinas", slug: "bolsas-m", parent: "acessorios-m" },
+	{ name: "Chapéus", displayName: "Chapéus Masculinos", slug: "chapeus-m", parent: "acessorios-m" },
+	{ name: "Cintos", displayName: "Cintos Masculinos", slug: "cintos-m", parent: "acessorios-m" },
+	{ name: "Gorros", displayName: "Gorros Masculinos", slug: "gorros-m", parent: "acessorios-m" },
+	{ name: "Lenços", displayName: "Lenços Masculinos", slug: "lencos-m", parent: "acessorios-m" },
+	{ name: "Relógios", displayName: "Relógios Masculinos", slug: "relogios-m", parent: "acessorios-m" },
+	{ name: "Esporte", displayName: "Esporte Masculino", slug: "esporte-m", parent: "chapeus-m" },
+	{ name: "Rasteirinhas", displayName: "Rasteirinhas Masculinas", slug: "rasteirinhas-m", parent: "calcados-m" },
+
+	// Femininas
+	{ name: "Acessórios", displayName: "Acessórios Femininos", slug: "acessorios-f", parent: "moda-feminina" },
+	{ name: "Roupas", displayName: "Roupas Femininas", slug: "roupas-f", parent: "moda-feminina" },
+	{ name: "Calçados", displayName: "Calçados Femininos", slug: "calcados-f", parent: "moda-feminina" },
+	{ name: "Blusas", displayName: "Blusas Femininas", slug: "blusas-f", parent: "roupas-f" },
+	{ name: "Calças", displayName: "Calças Femininas", slug: "calcas-f", parent: "roupas-f" },
+	{ name: "Casacos", displayName: "Casacos Femininos", slug: "casacos-f", parent: "roupas-f" },
+	{ name: "Saias", displayName: "Saias Femininas", slug: "saias-f", parent: "roupas-f" },
+	{ name: "Shorts", displayName: "Shorts Femininos", slug: "shorts-f", parent: "roupas-f" },
+	{ name: "Bolsas", displayName: "Bolsas Femininas", slug: "bolsas-f", parent: "acessorios-f" },
+	{ name: "Chapéus", displayName: "Chapéus Femininos", slug: "chapeus-f", parent: "acessorios-f" },
+	{ name: "Cintos", displayName: "Cintos Femininos", slug: "cintos-f", parent: "acessorios-f" },
+	{ name: "Lenços", displayName: "Lenços Femininos", slug: "lencos-f", parent: "acessorios-f" },
+	{ name: "Esporte", displayName: "Esporte Feminino", slug: "esporte-f", parent: "chapeus-f" },
+	{ name: "Rasteirinhas", displayName: "Rasteirinhas Femininas", slug: "rasteirinhas-f", parent: "calcados-f" },
+] as const
+
+export type GenderedCategory = (typeof GENDERED_CATEGORY_TREE)[number]
+
 export type SeedProductSize = {
 	size: string
 	available: boolean
@@ -80,7 +132,7 @@ export const products: SeedProduct[] = [
 		price: 23999,
 		currency: "BRL",
 		condition: "Usado",
-		categories: ["Moda Masculina", "Roupas", "Calças", "Moda Feminina", "Calçados", "Rasteirinhas"],
+		categories: ["Moda Masculina", "Roupas", "Calças"],
 		sizes: [
 			{ size: "35", available: true },
 			{ size: "36", available: true },
@@ -546,7 +598,7 @@ export const products: SeedProduct[] = [
 		price: 19999,
 		currency: "BRL",
 		condition: "Excelente estado",
-		categories: ["Moda Masculina", "Roupas", "Calças", "Moda Feminina", "Calçados", "Rasteirinhas"],
+		categories: ["Moda Masculina", "Roupas", "Calças"],
 		sizes: [
 			{ size: "34", available: true },
 			{ size: "37", available: true },
@@ -594,7 +646,7 @@ export const products: SeedProduct[] = [
 		price: 23999,
 		currency: "BRL",
 		condition: "Excelente estado",
-		categories: ["Moda Masculina", "Roupas", "Calças", "Moda Feminina", "Calçados", "Rasteirinhas"],
+		categories: ["Moda Masculina", "Roupas", "Calças"],
 		sizes: [
 			{ size: "34", available: true },
 			{ size: "37", available: true },
@@ -1216,7 +1268,7 @@ export const products: SeedProduct[] = [
 		price: 8999,
 		currency: "BRL",
 		condition: "Excelente estado",
-		categories: ["Moda Feminina", "Roupas", "Blusas", "Casacos"],
+		categories: ["Moda Feminina", "Roupas", "Blusas"],
 		sizes: [
 			{ size: "PP", available: true },
 			{ size: "P", available: true },
@@ -1362,7 +1414,7 @@ export const products: SeedProduct[] = [
 		price: 4999,
 		currency: "BRL",
 		condition: "Novo",
-		categories: ["Moda Masculina", "Acessórios", "Chapéus", "Moda Feminina"],
+		categories: ["Moda Masculina", "Acessórios", "Chapéus"],
 		sizes: [
 			{ size: "Unico", available: true },
 		],
