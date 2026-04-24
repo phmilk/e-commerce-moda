@@ -44,10 +44,16 @@ model Condition {
 }
 
 model Category {
-  id       Int               @id @default(autoincrement())
-  name     String            @unique
-  slug     String            @unique
-  products ProductCategory[]
+  id          Int               @id @default(autoincrement())
+  name        String
+  displayName String?
+  slug        String            @unique
+  parentId    Int?
+  parent      Category?         @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[]        @relation("CategoryHierarchy")
+  products    ProductCategory[]
+
+  @@index([parentId])
 }
 
 model ProductCategory {

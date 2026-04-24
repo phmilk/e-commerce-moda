@@ -19,6 +19,7 @@
     "check": "biome check",
     "git-flow": "node scripts/git-flow.mjs",
     "post-cta-init": "pnpm dlx create-db@latest --user-agent tanstack/tsrouter",
+    "postinstall": "prisma generate",
     "db:generate": "dotenv -e .env.local -- prisma generate",
     "db:push": "dotenv -e .env.local -- prisma db push",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
