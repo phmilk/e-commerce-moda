@@ -10,31 +10,57 @@ datasource db {
 model Product {
   id          Int               @id @default(autoincrement())
   sku         String            @unique
-  slug        String
+  slug        String            @unique
   name        String
   description String
-  brand       String
-  price       Decimal
+  brandId     Int
+  brand       Brand             @relation(fields: [brandId], references: [id])
+  price       Int
   currency    String            @default("BRL")
-  category    String
+  conditionId Int
+  condition   Condition         @relation(fields: [conditionId], references: [id])
   categories  ProductCategory[]
   images      ProductImage[]
   sizes       ProductSize[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  @@unique([category, slug])
-  @@index([category])
+  @@index([brandId])
+  @@index([conditionId])
+}
+
+model Brand {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+model Condition {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+}
+
+model Category {
+  id       Int               @id @default(autoincrement())
+  name     String            @unique
+  slug     String            @unique
+  products ProductCategory[]
 }
 
 model ProductCategory {
-  id        Int     @id @default(autoincrement())
-  productId Int
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  name      String
-  position  Int
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id])
+  position   Int
 
+  @@unique([productId, categoryId])
   @@index([productId])
+  @@index([categoryId])
 }
 
 model ProductImage {
@@ -47,12 +73,22 @@ model ProductImage {
   @@index([productId])
 }
 
+model Size {
+  id       Int           @id @default(autoincrement())
+  name     String        @unique
+  slug     String        @unique
+  products ProductSize[]
+}
+
 model ProductSize {
   id        Int     @id @default(autoincrement())
   productId Int
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  size      String
+  sizeId    Int
+  size      Size    @relation(fields: [sizeId], references: [id])
   available Boolean @default(true)
 
+  @@unique([productId, sizeId])
   @@index([productId])
+  @@index([sizeId])
 }
