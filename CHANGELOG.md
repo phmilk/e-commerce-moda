@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.3.0...e-commerce-moda-v1.4.0) (2026-04-24)
+
+
+### Features
+
+* PDP com galeria, breadcrumb canonico, SEO e prefetch on intent ([#12](https://github.com/phmilk/e-commerce-moda/issues/12)) ([dc5d32b](https://github.com/phmilk/e-commerce-moda/commit/dc5d32bf8707641b20f853d0373b950355541121))
+
 ## [1.3.0](https://github.com/phmilk/e-commerce-moda/compare/e-commerce-moda-v1.2.0...e-commerce-moda-v1.3.0) (2026-04-24)
 
 
