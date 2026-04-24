@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Badge } from "#/components/ui/badge";
 import { Card, CardContent } from "#/components/ui/card";
 import { formatBRL } from "#/lib/format/price";
@@ -28,8 +29,9 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
 
 	return (
 		<Card className="group gap-3 overflow-hidden p-0 transition hover:shadow-md focus-within:shadow-md">
-			<a
-				href={`/produto/${product.slug}`}
+			<Link
+				to="/produto/$slug"
+				params={{ slug: product.slug }}
 				className="flex flex-col rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 				aria-label={`Ver detalhes de ${product.name}`}
 			>
@@ -80,7 +82,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
 						{formatBRL(product.priceCents)}
 					</p>
 				</CardContent>
-			</a>
+			</Link>
 		</Card>
 	);
 }

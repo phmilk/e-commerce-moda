@@ -34,6 +34,31 @@ export type ListProductsResult = {
 	totalPages: number;
 };
 
+/**
+ * Full payload for the product detail page. Shaped at the server
+ * boundary so the client receives exactly what it renders — no raw
+ * Prisma types, no dangling nullable fields from partial selects.
+ */
+export type ProductDetail = {
+	id: number;
+	sku: string;
+	slug: string;
+	name: string;
+	description: string;
+	priceCents: number;
+	currency: string;
+	brand: { name: string; slug: string };
+	condition: { name: string; slug: string };
+	images: Array<{ path: string; alt: string; position: number }>;
+	sizes: Array<{ name: string; slug: string; available: boolean }>;
+	/** Canonical breadcrumb derived from `Category.parentId`, root → leaf. */
+	breadcrumb: Array<{
+		name: string;
+		displayName: string | null;
+		slug: string;
+	}>;
+};
+
 /** One option in a filter section, with the number of matching products. */
 export type FacetOption = {
 	/** Short label shown inside compact UI (e.g. the filter tree). */
@@ -383,5 +408,122 @@ export const listFilterFacets = createServerFn({ method: "GET" })
 				categoryParents,
 				categoryIdBySlug,
 			),
+		};
+	});
+
+/**
+ * Walks up `Category.parentId` starting from a leaf id, batching lookups
+ * by ancestor id so the breadcrumb is built with at most O(depth) DB
+ * round-trips in the worst case. In practice each product has ≤4 levels
+ * (Gender → Tipo → Sub-tipo → Leaf), so this is 1–4 queries.
+ */
+async function buildProductBreadcrumb(
+	leafCategoryId: number,
+): Promise<ProductDetail["breadcrumb"]> {
+	const chain: Array<{
+		id: number;
+		name: string;
+		displayName: string | null;
+		slug: string;
+		parentId: number | null;
+	}> = [];
+	let currentId: number | null = leafCategoryId;
+	while (currentId !== null) {
+		const row: {
+			id: number;
+			name: string;
+			displayName: string | null;
+			slug: string;
+			parentId: number | null;
+		} | null = await prisma.category.findUnique({
+			where: { id: currentId },
+			select: {
+				id: true,
+				name: true,
+				displayName: true,
+				slug: true,
+				parentId: true,
+			},
+		});
+		if (!row) break;
+		chain.push(row);
+		currentId = row.parentId;
+	}
+	// root → leaf
+	return chain
+		.reverse()
+		.map(({ name, displayName, slug }) => ({ name, displayName, slug }));
+}
+
+/**
+ * Server function that returns the full detail payload for a single
+ * product, identified by slug. Called from the PDP route loader on SSR
+ * and from the client via `useQuery`; both reuse the same TanStack
+ * Query cache key (`["product", slug]`).
+ *
+ * Returns `null` when the slug does not exist — the route turns that
+ * into a `notFound()`.
+ */
+export const getProductBySlug = createServerFn({ method: "GET" })
+	.inputValidator((data: unknown): string => {
+		if (typeof data !== "string" || data.length === 0) {
+			throw new Error("slug is required");
+		}
+		return data;
+	})
+	.handler(async ({ data: slug }): Promise<ProductDetail | null> => {
+		const product = await prisma.product.findUnique({
+			where: { slug },
+			include: {
+				brand: { select: { name: true, slug: true } },
+				condition: { select: { name: true, slug: true } },
+				images: {
+					orderBy: { position: "asc" },
+					select: { path: true, position: true },
+				},
+				sizes: {
+					orderBy: { id: "asc" },
+					select: {
+						available: true,
+						size: { select: { name: true, slug: true } },
+					},
+				},
+				categories: {
+					orderBy: { position: "asc" },
+					select: { categoryId: true },
+				},
+			},
+		});
+
+		if (!product) return null;
+
+		const leafCategoryId = product.categories.at(-1)?.categoryId;
+		const breadcrumb =
+			leafCategoryId !== undefined
+				? await buildProductBreadcrumb(leafCategoryId)
+				: [];
+
+		const alt = `${product.name} — ${product.brand.name}`;
+		return {
+			id: product.id,
+			sku: product.sku,
+			slug: product.slug,
+			name: product.name,
+			description: product.description,
+			priceCents: product.price,
+			currency: product.currency,
+			brand: product.brand,
+			condition: product.condition,
+			images: product.images.map((img) => ({
+				path: img.path,
+				alt,
+				position: img.position,
+			})),
+			sizes: product.sizes.map((s) => ({
+				name: s.size.name,
+				slug: s.size.slug,
+				available: s.available,
+			})),
+			breadcrumb,
 		};
 	});
