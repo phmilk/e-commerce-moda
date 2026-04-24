@@ -52,10 +52,10 @@ Cada escolha foi feita tendo em vista os critérios do desafio: **qualidade de U
 Pré-requisitos: **Node.js ≥ 20** e **pnpm ≥ 9**. Nada mais — o SQLite vive em um arquivo local (`dev.db`).
 
 ```bash
-pnpm install
+pnpm install                      # inclui `postinstall` com `prisma generate`
 cp .env.example .env.local        # cria o arquivo de variáveis locais
 pnpm db:push                      # cria dev.db e aplica o schema
-pnpm db:seed                      # popula 96 produtos, 300 itens de breadcrumb, 412 imagens
+pnpm db:seed                      # popula 96 produtos em árvore gendered + 412 imagens
 pnpm dev                          # http://localhost:3000
 ```
 
@@ -80,15 +80,16 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
 | `pnpm dev` | Inicia o servidor de desenvolvimento em `:3000` |
 | `pnpm build` | Build de produção |
 | `pnpm preview` | Preview local do build |
-| `pnpm test` | Executa a suíte Vitest |
+| `pnpm test` | Executa a suíte Vitest (45 testes) |
 | `pnpm lint` | Lint com Biome |
 | `pnpm format` | Format com Biome |
 | `pnpm check` | Lint + format em um passo |
-| `pnpm db:generate` | Gera o Prisma Client em `src/generated/prisma` |
+| `postinstall` | Roda `prisma generate` automaticamente após `pnpm install` (garante o Prisma Client em CI/dev sem passo manual) |
+| `pnpm db:generate` | Gera o Prisma Client em `src/generated/prisma` (versão com `.env.local`) |
 | `pnpm db:push` | Sincroniza o schema Prisma com o banco |
 | `pnpm db:migrate` | Cria/aplica migrations |
 | `pnpm db:studio` | Abre o Prisma Studio |
-| `pnpm db:seed` | Popula o banco com os 96 produtos de `prisma/seed-data.ts` |
+| `pnpm db:seed` | Popula o banco com os 96 produtos de `prisma/seed-data.ts` + árvore de categorias gendered |
 
 ---
 
@@ -98,28 +99,38 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
 .
 ├── dev.db                   # SQLite local (gitignored, criado pelo pnpm db:push)
 ├── prisma/
-│   ├── schema.prisma        # Product + lookups (Brand, Category, Condition, Size) + junções (ProductCategory/ProductSize) + ProductImage
-│   ├── seed-data.ts         # 96 produtos hardcoded (typed)
-│   └── seed.ts              # insere seed-data via Prisma
+│   ├── schema.prisma        # Product + lookups (Brand, Category c/ parentId+displayName, Condition, Size) + junções
+│   ├── seed-data.ts         # 96 produtos + GENDERED_CATEGORY_TREE (raízes + ramos -m/-f)
+│   └── seed.ts              # insere seed-data via Prisma; resolve breadcrumbs → slugs gendered
 ├── public/
 │   └── upload/<sku>/        # imagens de produto (96 pastas, 412 arquivos)
 └── src/
     ├── components/
-    │   ├── Layout/          # Header, Footer e wrappers de página
-    │   │   └── Header/      # Logo, SearchBar, FilterButton, CartButton, LoginButton
-    │   └── ui/              # shadcn/ui (button, input, badge, sheet, separator...)
+    │   ├── Layout/          # Header e wrappers de página
+    │   │   └── Header/      # Logo, SearchBar (busca fuzzy), FilterButton (badge + store), CartButton, LoginButton
+    │   ├── PLP/             # fractal: PLP.tsx + ProductGrid/ProductCard, FilterSheet/CategoryTree+FilterSection, SortSelect, PLPHeader, PLPPagination, EmptyState, ProductGridSkeleton, ProductsJsonLd, hooks/
+    │   └── ui/              # shadcn/ui (button, input, badge, sheet, separator, card, select, checkbox, pagination, skeleton, breadcrumb, tooltip)
+    ├── hooks/               # hooks compartilhados entre features (ex.: use-filter-sheet)
     ├── integrations/
     │   ├── better-auth/     # Provider e helpers de autenticação
     │   └── tanstack-query/  # Root provider + devtools do Query
-    ├── lib/                 # utilitários compartilhados (cn, auth client...)
+    ├── lib/
+    │   ├── format/          # formatadores (BRL)
+    │   ├── products/        # search-params (+ testes), seo (title/description/canonical)
+    │   ├── utils.ts         # cn (clsx + tailwind-merge)
+    │   └── auth-client.ts   # client do Better Auth
+    ├── server/
+    │   └── products.ts      # server functions (createServerFn): listProducts, listFilterFacets
     ├── routes/
-    │   ├── __root.tsx       # shell HTML, metadados, devtools
-    │   ├── _layout/         # layout com Header (grupo de rotas)
+    │   ├── __root.tsx       # shell HTML, TooltipProvider, devtools
+    │   ├── _layout/         # grupo com Header
+    │   │   ├── route.tsx    # <Header /> + <Outlet />
+    │   │   └── index.tsx    # rota / (PLP) — validateSearch, loader, head (SEO)
     │   └── api/             # route handlers (ex.: /api/auth/$)
-    ├── generated/prisma/    # Prisma Client (gerado, não comitado)
-    ├── router.tsx           # configuração do TanStack Router + SSR Query
+    ├── generated/prisma/    # Prisma Client (gerado, não comitado; `postinstall` cria)
+    ├── router.tsx           # TanStack Router: SSR Query + parseSearch/stringifySearch (URL com chaves repetidas)
     ├── db.ts                # instância singleton do Prisma
-    └── styles.css           # Tailwind + tokens do design system
+    └── styles.css           # Tailwind v4 + tokens do design system
 ```
 
 ### Convenções
@@ -135,9 +146,9 @@ O template versionado é [`.env.example`](.env.example). O `.env.local` é gitig
 Mapeamento direto dos requisitos do PDF do desafio para o status atual da implementação.
 
 ### Página principal — Listagem (PLP)
-- [ ] Exibição em grade de produtos
-- [ ] Filtros por categoria e marca
-- [ ] Ordenação por preço e nome
+- [x] Exibição em grade de produtos (`ProductGrid` responsivo 2→3→4 colunas)
+- [x] Filtros por categoria e marca (categoria como árvore tri-state + marca + condição em checkboxes no `FilterSheet`)
+- [x] Ordenação por preço e nome (`SortSelect` dentro do sheet, 5 chaves: relevância, preço asc/desc, nome A→Z / Z→A)
 
 ### Página interna — Detalhes (PDP)
 - [ ] Visualização expandida do item
@@ -147,18 +158,18 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 ### Navegação / Fluxo do usuário
 - [x] Layout base com Header fixo e responsivo
 - [ ] Transição suave entre páginas
-- [ ] Persistência de estado básica (filtros, busca)
-- [ ] Botão de retorno e breadcrumbs
+- [x] Persistência de estado básica (filtros, busca, ordenação e paginação vivem 100% em search params — sobrevivem a refresh, back/forward e são compartilháveis via URL)
+- [ ] Botão de retorno e breadcrumbs (componente `breadcrumb` do shadcn instalado; aguarda PDP)
 
 ### Feedback / Estados de interface
-- [ ] Skeleton screens na PLP e PDP
-- [ ] Feedback visual em interações (hover, active, focus)
-- [ ] Estados de erro e vazio
+- [x] Skeleton screens na PLP (`ProductGridSkeleton` renderiza enquanto o cache do React Query está vazio; em transições de filtro usa `opacity-70`)
+- [x] Feedback visual em interações (tokens `hover:`, `focus-visible:`, `data-[state=…]` vindos dos componentes shadcn/Radix em toda UI)
+- [x] Estados de erro e vazio (`EmptyState` com CTA "Limpar filtros" quando a combinação retorna 0)
 
 ### Estrutura de dados
 - [x] Identificação: nome + `Brand` (lookup compartilhado — 6 marcas fictícias referenciadas por `brandId`)
 - [x] Comercial: preço em `Int` (centavos BRL, evita arredondamento de float) + `Condition` (lookup com `Novo` / `Usado` / `Excelente estado`)
-- [x] Especificações: `Size` (lookup — 24 tamanhos distintos) via junção `ProductSize` com `available`, e `Category` (lookup — 19 categorias) via junção `ProductCategory` ordenada (breadcrumb multi-nível; um produto pode pertencer a várias categorias)
+- [x] Especificações: `Size` (lookup — 24 tamanhos distintos) via junção `ProductSize` com `available`, e `Category` com **hierarquia canônica** via `parentId` self-relation + `displayName` gendered (ex.: "Acessórios Masculinos" / "Acessórios Femininos") via junção `ProductCategory` ordenada
 - [x] Visual: imagens (relação `ProductImage` com `path` e `position`, servidas de `public/upload/<sku>/`)
 
 > Campos `[x]` já estão implementados; `[ ]` estão planejados. Esta seção é mantida **viva**: veja a skill [`update-readme`](.claude/skills/update-readme/SKILL.md).
@@ -169,15 +180,20 @@ Mapeamento direto dos requisitos do PDF do desafio para o status atual da implem
 
 Itens entregues **além** do escopo mínimo:
 
-- **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`) cobrindo 4 categorias e 6 marcas fictícias, com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`. Condição de cada produto é atribuída deterministicamente por hash FNV-1a do SKU — distribuição estável entre execuções.
-- **Schema de dados modelado**: `Product` normalizado com quatro lookups (`Brand`, `Category`, `Condition`, `Size`) e duas junções (`ProductCategory` ordenada para breadcrumb multi-nível; `ProductSize` carregando `available` por tamanho) em [`prisma/schema.prisma`](prisma/schema.prisma). Índices em todas as FKs, `slug` globalmente único em `Product` e em cada lookup, preço em `Int` (centavos). Slugs URL-safe em todos os lookups preparam filtros por query-string (ex.: `?marca=kairo&condicao=novo&categoria=roupas&tamanho=m`).
+- **Seed real de catálogo**: 96 produtos hardcoded em [`prisma/seed-data.ts`](prisma/seed-data.ts) (tipados via `SeedProduct`), com 412 imagens reais servidas estaticamente de `public/upload/<sku>/`. Condição de cada produto é atribuída deterministicamente por hash FNV-1a do SKU — distribuição estável entre execuções.
+- **Hierarquia canônica de categorias no banco**: `Category.parentId` + `displayName` seedados a partir de `GENDERED_CATEGORY_TREE`. Categorias aparecem duplicadas por gênero (`acessorios-m`/`acessorios-f`, `blusas-m`/`blusas-f`…) para que "Acessórios sob Moda Masculina" seja distinto de "Acessórios sob Moda Feminina". Produtos unissex são tagueados nas duas árvores automaticamente pelo `resolveProductCategories` do seed.
+- **Server functions tipadas**: [`src/server/products.ts`](src/server/products.ts) expõe `listProducts` e `listFilterFacets` via `createServerFn` do TanStack Start. Input validado por `validateProductSearch`, chamadas do loader (SSR) e do cliente (`useQuery`) compartilham o mesmo cache key.
+- **Filtros com contagem contextual**: o sheet recalcula a contagem de cada opção excluindo o próprio facet no `where` (padrão de faceted search). Árvore de categoria adota tri-state (checkbox indeterminado) e **compacta a URL** quando todas as folhas de um ramo estão selecionadas — com checagem anti-widening (`sumLeafCounts >= node.count`) para não transformar "Esporte" em "todos os Chapéus".
+- **Busca fuzzy por tokens** na `SearchBar`: debounce 300ms + tokenização em AND-contains sobre `name`/`description` (tolera ordem de palavras e strings parciais).
+- **URL como fonte de verdade**: `parseSearch`/`stringifySearch` custom no TanStack Router emitem chaves repetidas (`?categoria=a&categoria=b`) em vez de JSON — URLs curtas, compartilháveis, indexáveis.
+- **SEO dinâmico por combinação de filtros**: `<title>`, `<meta name="description">`, canonical e OpenGraph derivam do search; **JSON-LD `ItemList`** (schema.org) é renderizado inline no SSR com `Product`/`Offer`/`Brand` por item.
 - **SSR com hidratação**: o HTML inicial é renderizado no servidor (TanStack Start + Nitro), melhorando LCP e SEO — crítico para e-commerce.
-- **Type-safety ponta-a-ponta**: rotas, search params, loaders e dados seguem tipados do servidor ao componente.
-- **Acessibilidade de base**: `aria-label` em botões de ícone, `role="searchbox"` no campo de busca, estados `focus-visible` consistentes vindos dos tokens do shadcn/ui.
-- **Responsividade**: o Header já reagrupa controles em mobile (ícones) e desktop (com label).
+- **Imagens performáticas**: `loading="lazy"` em todos os cards + `fetchPriority="high"` + `loading="eager"` nos 4 primeiros (acima da dobra), `width`/`height` explícitos para CLS zero, `sizes` responsivo.
+- **Testes automatizados**: 45 testes Vitest cobrindo `validateProductSearch`, `normalizeSearchKey`, `toggleFacet`, `clearFilters`, `countActiveFilters` + helpers puros do `CategoryTree` (collectLeafSlugs, simplifyTree, expandToLeaves, compactSelection, subtreeState).
+- **Organização fractal**: componentes filhos moram dentro da pasta do pai (ex.: `PLP/FilterSheet/CategoryTree/`), cada um com seu `index.ts` barrel. TSDoc em toda função/prop pública.
+- **Acessibilidade de base**: `aria-label` em botões de ícone, `role="searchbox"` na busca, `aria-live="polite"` no contador de resultados, `aria-current="page"` na paginação, tri-state com `checked="indeterminate"` via Radix.
 - **Devtools integradas**: TanStack Router Devtools + Query Devtools em um único painel, facilitando debug de cache e navegação.
 - **Biome unificado**: lint e format em um só pipeline, com `pnpm check` como gate único.
-- **Padrão de componentização escalável**: cada componente vive em sua própria pasta com `index.ts` barrel; facilita escalar de 5 para 500 componentes sem caos.
 - **Fundação preparada para autenticação e persistência**: Better Auth + Prisma já plugados, permitindo evoluir para lista de desejos / histórico sem reformar a base.
 
 ---
@@ -186,19 +202,20 @@ Itens entregues **além** do escopo mínimo:
 
 > Seção opcional do desafio. Descreve como o backend seria estruturado para alimentar esta interface.
 
-### API REST (ou RPC via server functions)
+### Server functions (RPC) — **implementado**
 
-```
-GET  /api/products                   # PLP — paginado, com filtros via query params
-GET  /api/products/:slug             # PDP — detalhes + variantes
-GET  /api/products/filters           # categorias, marcas, tamanhos disponíveis
-GET  /api/products/search?q=         # busca full-text
-POST /api/cart                       # adiciona item (sessão ou user)
-GET  /api/cart
+Em vez de route handlers REST, o backend usa server functions do TanStack Start ([`src/server/products.ts`](src/server/products.ts)) — a mesma função é chamada pelo `loader` no SSR e por `useQuery` no cliente, compartilhando o cache do TanStack Query.
+
+```ts
+listProducts({ data: search })        // PLP — paginado + filtros + ordenação
+listFilterFacets({ data: search })    // facets com contagens contextuais
+// PDP (planejado): getProductBySlug({ data: slug })
 ```
 
-**Exemplo de query params da PLP:**
-`/api/products?categoria=feminino&marca=marca-x&tamanho=M&ordem=preco-asc&pagina=1`
+**Exemplo de URL da PLP:**
+`/?q=bolsa&categoria=acessorios-f&marca=kairo&condicao=novo&ordem=preco-asc&pagina=2`
+
+As chaves repetidas (`?categoria=a&categoria=b`) são serializadas pelo `stringifySearch` custom do router, não JSON — mantendo URLs curtas e indexáveis.
 
 ### Modelo de dados (Prisma) — implementado
 
@@ -227,7 +244,7 @@ model Product {
 }
 
 model Brand           { id, name @unique, slug @unique }                              // 6 linhas: "Vértice Moda" / "vertice-moda" etc.
-model Category        { id, name @unique, slug @unique }                              // 19 linhas: "Moda Masculina" / "moda-masculina", "Roupas" / "roupas"...
+model Category        { id, name, displayName?, slug @unique, parentId?, parent, children, @@index([parentId]) }  // ~32 linhas (raízes gendered + ramos -m/-f); `parentId` self-relation canônica, `displayName` humanizado ("Acessórios Femininos")
 model Condition       { id, name @unique, slug @unique }                              // 3 linhas: "Novo" / "novo", "Usado" / "usado", "Excelente estado" / "excelente-estado"
 model Size            { id, name @unique, slug @unique }                              // 24 linhas: "P" / "p", "M" / "m", "37" / "37", "Unico" / "unico"...
 model ProductCategory { productId, categoryId, position, @@unique([productId, categoryId]) }  // itens ordenados do breadcrumb (N por produto)
@@ -240,7 +257,7 @@ model ProductImage    { productId, path, position }
 - **Slug globalmente único**: `/produto/<slug>` é amigável para SEO e usuário — `slug @unique` garante que cada produto tem URL determinística, sem precisar compor com categoria.
 - **Preço em `Int` centavos**: evita arredondamento de ponto-flutuante em qualquer camada (cálculo de total, frete, desconto, serialização JSON). Formatação de apresentação acontece na borda (`Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100)`).
 - **Quatro lookups + duas junções** (`Brand`/`Category`/`Condition`/`Size` + `ProductCategory`/`ProductSize`): valores que se repetem entre produtos viram tabelas referenciadas por FK; tabelas de junção guardam só o que é específico da relação (`position` no breadcrumb, `available` por tamanho). Ganhos imediatos: renomear "Roupas" → "Roupa" é `UPDATE` de uma linha em vez de ~100; filtros viram JOIN numérico indexado (mais rápido que `LIKE` em string); cada lookup pode ganhar atributos (`Brand.logo`, `Category.parentId`, `Size.displayOrder`) sem tocar nas junções.
-- **Breadcrumb via `ProductCategory` ordenada** (relação N-por-produto): um produto pertence a múltiplas categorias hierárquicas (ex.: `Moda Masculina > Roupas > Blusas`) em vez de a uma única classificação primária. Filtrar "Roupas" vira `where: { categories: { some: { category: { slug: 'roupas' } } } }` — mesmo nó serve PLPs distintos (masculina/feminina). Hoje a hierarquia emerge de `position`; caso vire navegação canônica, `Category.parentId` resolve sem migração de dados.
+- **Hierarquia canônica de categorias**: `Category.parentId` self-relation define a árvore em DB (não mais inferida de `ProductCategory.position`). Ramos são **duplicados por gênero** (slugs `-m` / `-f`) para que "Blusas sob Moda Masculina" seja uma linha distinta de "Blusas sob Moda Feminina" — necessário porque filtros são OR por slug, e não queríamos misturar gêneros. `displayName` armazena a forma humanizada com concordância em português ("Acessórios Femininos"), usada em heading e chips fora da árvore de filtros.
 - **`slug` URL-safe em todo lookup**: destrava filtros por query-string estáveis, não dependentes de `name` com acentos/espaços. Exemplo prático — `/produtos?marca=kairo&condicao=novo&categoria=roupas&tamanho=m` vira:
   ```ts
   prisma.product.findMany({
@@ -264,7 +281,8 @@ model ProductImage    { productId, path, position }
 
 - **Estoque real** em `ProductSize.stock: Int` em vez do booleano `available`.
 - **Atributos por lookup**: com `Brand`/`Category`/`Condition`/`Size` já como tabelas, evoluir para `Brand.logoPath`, `Condition.badgeColor` ou `Size.displayOrder` vira adição de coluna — sem migração de dados.
-- **Hierarquia canônica de categorias**: hoje a árvore (`Moda Masculina > Roupas > Blusas`) emerge da ordenação de `ProductCategory.position`. Para páginas de categoria (`/categoria/roupas`) com filhos/pais consistentes entre produtos, adicionar `Category.parentId` (self-relation) resolve sem migração de dados dos produtos.
+- **PDP**: rota `/produto/$slug` consumindo server function dedicada (`getProductBySlug`), galeria de imagens com `position`, breadcrumb resolvido via árvore `Category.parentId` (já canônica).
+- **Transições entre rotas**: habilitar `viewTransition` do TanStack Router na PLP↔PDP para cross-fade do card.
 
 ### Observabilidade (caminho natural de evolução)
 
